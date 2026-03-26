@@ -231,39 +231,7 @@ def messages_list(
     """
     cli_args: SharedArgs = ctx.obj
 
-    date_range: Tuple[datetime | None, datetime | None] = (None, None)
-    if True:
-        """convert from_str, to_str, range_str to date_range"""
-        import dateparser
-        from dateparser.search import search_dates
-
-        date_from: datetime | None = None
-        if from_str:
-            date_from = dateparser.parse(from_str)
-            date_from = date_from and date_from.replace(hour=0, minute=0, second=0, microsecond=0)
-
-        date_to: datetime | None = None
-        if to_str:
-            date_to = dateparser.parse(to_str)
-            date_to = date_to and date_to.replace(hour=23, minute=59, second=59, microsecond=0)
-
-        date_span: list[datetime] | None = None
-        if range_str and range_str == "this week":
-            start_date = dateparser.parse("sunday")
-            assert start_date is not None
-            date_span = [start_date, start_date + timedelta(days=6)]
-        elif range_str:
-            dates = search_dates(range_str, settings={"RETURN_TIME_SPAN": True}) or []
-            if len(dates) == 2:
-                # https://github.com/scrapinghub/dateparser/blob/cd5f226454e0ed3fe93164e7eff55b00f57e57c7/dateparser/search/search.py#L202
-                start = next((x for (s, x) in dates if "start" in s), None)
-                end = next((x for (s, x) in dates if "end" in s), None)
-                if start and end:
-                    date_span = [start, end]
-        if date_span:
-            date_range = (date_span[0], date_span[1])
-        else:
-            date_range = (date_from, date_to)
+    date_range: Tuple[datetime | None, datetime | None] = utils.date.parse_date_range(from_str, to_str, range_str)
 
     limit: int | None = None
     if num:
@@ -306,6 +274,76 @@ def messages_list(
     if not ok:
         raise typer.Exit(code=1)
 
+@message_cli.command(name="download")
+def message_download(
+    ctx: typer.Context,
+    dialog_id: Annotated[int, typer.Argument(help="Dialog peer ID (see `tele dialog list`).")],
+    from_str: Annotated[str | None, typer.Option("--from", help="Start boundary")] = None,
+    to_str: Annotated[str | None, typer.Option("--to", help="End boundary")] = None,
+    range_str: Annotated[
+        str | None,
+        typer.Option("--range", help="Natural-language date range (overrides --from/--to)."),
+    ] = None,
+    num: Annotated[int | None, typer.Option("--num", "-n", help="Maximum number of messages to fetch.")] = None,
+    offset_id: Annotated[int, typer.Option("--offset_id", help="Pagination offset message ID (excluded).")] = 0,
+    out_dir: Annotated[Path, typer.Option("--out-dir", "-o", help="Output directory for downloads.")] = Path("."),
+):
+    """
+    Download media from messages in a dialog.
+
+    Filtering arguments work exactly like `tele message list`.
+
+    Examples:
+    1. `tele message download 1375282077 -n 10 --out-dir ./downloads`
+    2. `tele message download 1375282077 --range "last week"`
+    """
+    cli_args: SharedArgs = ctx.obj
+
+    date_range: Tuple[datetime | None, datetime | None] = utils.date.parse_date_range(from_str, to_str, range_str)
+
+    limit: int | None = None
+    if num:
+        limit = num
+    if limit == 0 and date_range == (None, None):
+        limit = 1
+
+    async def _run() -> bool:
+        app = await TeleCLI.create(session_name=cli_args.session, config=load_config(config_file=cli_args.config_file))
+
+        (date_start, date_end) = date_range
+        earliest_message: Message | None = None
+        if date_start:
+            async with app.client() as client:
+                ret: list[Message] = [msg async for msg in client.iter_messages(dialog_id, offset_date=date_start, limit=1, offset_id=-1)]
+                earliest_message = ret[0] if len(ret) >= 1 else None
+
+        min_id: int = earliest_message.id if earliest_message else 0
+
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+        downloaded_count = 0
+        async with app.client() as client:
+            async for msg in client.iter_messages(
+                dialog_id,
+                min_id=min_id,
+                add_offset=(-1 if min_id else 0),
+                offset_id=offset_id,
+                offset_date=date_end,
+                limit=limit,  # type: ignore[arg-type]
+            ):
+                if msg.media:
+                    print(f"Downloading media from message {msg.id}...", fmt=cli_args.fmt)
+                    path = await client.download_media(msg, file=str(out_dir))
+                    if path:
+                        print(f"Saved to {path}", fmt=cli_args.fmt)
+                        downloaded_count += 1
+        
+        print(f"Downloaded {downloaded_count} files.", fmt=cli_args.fmt)
+        return True
+
+    ok = asyncio.run(_run())
+    if not ok:
+        raise typer.Exit(code=1)
 
 @message_cli.command(name="send", context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
 def message_send(

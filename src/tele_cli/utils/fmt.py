@@ -102,6 +102,19 @@ def _format_message_to_str(msg: Message, relative_time: bool = True) -> str:
         date_str = msg.date.strftime("%Y-%m-%d %H:%M") if msg.date else "?"
 
     text = msg.message or ""
+    if getattr(msg, "file", None):
+        file_info = []
+        if getattr(msg.file, "name", None):
+            file_info.append(f"name='{msg.file.name}'")
+        if getattr(msg.file, "ext", None) and not getattr(msg.file, "name", None):
+            file_info.append(f"ext='{msg.file.ext}'")
+        if getattr(msg.file, "size", None):
+            file_info.append(f"size={msg.file.size}")
+
+        file_info_str = ", ".join(file_info)
+        attachment_str = f"[📎 Attachment: {file_info_str}]" if file_info_str else "[📎 Attachment]"
+        text = f"{text}\n{attachment_str}" if text else attachment_str
+
     message = "".join(["  " + x for x in text.splitlines(keepends=True)])
 
     return f"* {msg.id} ({date_str}) - {sender_name}\n" + "\n" + message + "\n"
