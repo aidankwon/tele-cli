@@ -4,7 +4,7 @@ import asyncio
 import builtins
 import json
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Annotated, Tuple, cast
 
@@ -148,6 +148,22 @@ def dialog_list(
         bool,
         typer.Option("--archived", help="Include archived dialogs (otherwise hidden)."),
     ] = False,
+    order: Annotated[
+        OutputOrder | None,
+        typer.Option("--order", help="Output order by time (desc: latest first, asc: reverse)."),
+    ] = None,
+    older: Annotated[
+        str | None,
+        typer.Option("--older", help="Show dialogs whose latest message is older than the given time (e.g. '1d', '1m', '1y')."),
+    ] = None,
+    newer: Annotated[
+        str | None,
+        typer.Option("--newer", help="Show dialogs whose latest message is newer than the given time (e.g. '1d', '1m', '1y')."),
+    ] = None,
+    empty: Annotated[
+        bool,
+        typer.Option("--empty", help="Show only empty dialogs (e.g., no messages or only service messages)."),
+    ] = False,
 ):
     """
     List dialogs from your account.
@@ -175,12 +191,51 @@ def dialog_list(
         dialog_list: list[Dialog] = await app.list_dialogs(with_archived=archived)
 
         def _filter_dialogs(dialogs: list[Dialog], dialog_types: list[DialogType] | None = None) -> list[Dialog]:
-            if not dialog_types:
-                return dialogs
+            res = dialogs
+            if dialog_types:
+                res = [d for d in res if get_dialog_type(d) in dialog_types]
 
-            return [d for d in dialogs if get_dialog_type(d) in dialog_types]
+            now = datetime.now(timezone.utc)
+            if older:
+                older_td = utils.date.parse_duration(older)
+                if older_td:
+                    target_date = now - older_td
+                    res = [d for d in res if d.date and d.date < target_date]
+                else:
+                    print(f"Error: Invalid duration string '{older}'", fmt=cli_args.fmt)
+                    raise typer.Exit(code=1)
+
+            if newer:
+                newer_td = utils.date.parse_duration(newer)
+                if newer_td:
+                    target_date = now - newer_td
+                    res = [d for d in res if d.date and d.date > target_date]
+                else:
+                    print(f"Error: Invalid duration string '{newer}'", fmt=cli_args.fmt)
+                    raise typer.Exit(code=1)
+
+            if empty:
+                def is_empty_dialog(d: Dialog) -> bool:
+                    msg = getattr(d, "message", None)
+                    if not msg:
+                        return True
+                    if getattr(msg, "action", None) is not None:
+                        return True
+                    has_text = bool(getattr(msg, "message", None))
+                    has_media = bool(getattr(msg, "media", None))
+                    return not has_text and not has_media
+                
+                res = [d for d in res if is_empty_dialog(d)]
+
+            return res
 
         dialog_list = _filter_dialogs(dialog_list, dialog_types=dialog_type_filters)
+
+        if order:
+            dialog_list.sort(
+                key=lambda d: d.date or datetime.min.replace(tzinfo=timezone.utc),
+                reverse=(order == OutputOrder.desc)
+            )
 
         print(utils.fmt.format_dialog_list(dialog_list, cli_args.fmt), fmt=cli_args.fmt)
         return True
@@ -189,8 +244,36 @@ def dialog_list(
     if not ok:
         raise typer.Exit(code=1)
 
+@dialog_cli.command(name="delete", context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
+def dialog_delete(
+    ctx: typer.Context,
+    dialog_ids: Annotated[list[int], typer.Argument(help="Dialog peer IDs to delete.")],
+    revoke: Annotated[bool, typer.Option("--revoke", help="Withdraw for everyone (leave group, delete chat).")] = False,
+):
+    """
+    Delete dialog(s).
 
-@message_cli.command(name="list")
+    Examples:
+    1. tele dialog delete 1375282077
+    """
+    cli_args: SharedArgs = ctx.obj
+
+    async def _run() -> bool:
+        app = await TeleCLI.create(session_name=cli_args.session, config=load_config(config_file=cli_args.config_file))
+
+        async with app.client() as client:
+            for d_id in dialog_ids:
+                print(f"Deleting dialog {d_id}...", fmt=cli_args.fmt)
+                await client.delete_dialog(d_id, revoke=revoke)
+            print(f"Deleted {len(dialog_ids)} dialogs.", fmt=cli_args.fmt)
+            
+        return True
+
+    ok = asyncio.run(_run())
+    if not ok:
+        raise typer.Exit(code=1)
+
+@message_cli.command(name="list", context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
 def messages_list(
     ctx: typer.Context,
     dialog_id: Annotated[int, typer.Argument(help="Dialog peer ID (see `tele dialog list`).")],
@@ -274,7 +357,7 @@ def messages_list(
     if not ok:
         raise typer.Exit(code=1)
 
-@message_cli.command(name="download")
+@message_cli.command(name="download", context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
 def message_download(
     ctx: typer.Context,
     dialog_id: Annotated[int, typer.Argument(help="Dialog peer ID (see `tele dialog list`).")],
@@ -339,6 +422,35 @@ def message_download(
                         downloaded_count += 1
         
         print(f"Downloaded {downloaded_count} files.", fmt=cli_args.fmt)
+        return True
+
+    ok = asyncio.run(_run())
+    if not ok:
+        raise typer.Exit(code=1)
+
+@message_cli.command(name="delete", context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
+def message_delete(
+    ctx: typer.Context,
+    dialog_id: Annotated[int, typer.Argument(help="Dialog peer ID (see `tele dialog list`).")],
+    message_ids: Annotated[list[int], typer.Argument(help="Message IDs to delete.")],
+    revoke: Annotated[bool, typer.Option("--revoke", help="Delete for everyone.")] = True,
+):
+    """
+    Delete messages in a dialog.
+
+    Examples:
+    1. tele message delete 1375282077 123 124
+    """
+    cli_args: SharedArgs = ctx.obj
+
+    async def _run() -> bool:
+        app = await TeleCLI.create(session_name=cli_args.session, config=load_config(config_file=cli_args.config_file))
+
+        async with app.client() as client:
+            print(f"Deleting messages {message_ids}...", fmt=cli_args.fmt)
+            await client.delete_messages(dialog_id, message_ids, revoke=revoke)
+            print(f"Deleted {len(message_ids)} messages.", fmt=cli_args.fmt)
+            
         return True
 
     ok = asyncio.run(_run())

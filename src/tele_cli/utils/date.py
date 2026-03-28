@@ -1,8 +1,25 @@
 from datetime import datetime, timedelta
 from typing import Tuple
 
+import re
 import dateparser
 from dateparser.search import search_dates
+
+def parse_duration(duration_str: str) -> timedelta | None:
+    match = re.match(r'^(\d+)([dwmy])$', duration_str.strip().lower())
+    if not match:
+        return None
+    val = int(match.group(1))
+    unit = match.group(2)
+    if unit == 'd':
+        return timedelta(days=val)
+    elif unit == 'w':
+        return timedelta(weeks=val)
+    elif unit == 'm':
+        return timedelta(days=val * 30)
+    elif unit == 'y':
+        return timedelta(days=val * 365)
+    return None
 
 def parse_date_range(
     from_str: str | None = None,
