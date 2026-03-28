@@ -16,7 +16,7 @@ Use `tele` to authenticate, list dialogs, and fetch messages from Telegram direc
 ## Setup
 
 - Requires `uv`.
-- Install/upgrade (one-time per session): `uv tool install --upgrade git+https://github.com/aidankwonn/tele-cli`
+- Install/upgrade (one-time per session): `uv tool install --upgrade git+https://github.com/aidankwon/tele-cli`
 - Verify install: `tele -V`
 - Per terminal session: run `tele -h` once, then confirm auth with `tele -f json me` (log in if needed).
 
