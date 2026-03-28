@@ -68,6 +68,13 @@ List all dialogs (users, groups, channels):
 
 - `tele -f json dialog list`
 
+Filtering and sorting options:
+
+- `--older <duration>`: Show dialogs where the latest message is older than the given time (e.g., `1d`, `1w`, `1m`, `1y`).
+- `--newer <duration>`: Show dialogs where the latest message is newer than the given time.
+- `--empty`: Show only empty dialogs (no messages or only service messages).
+- `--order asc|desc`: Output order by time (`desc` is latest first, `asc` is reverse).
+
 Notes:
 
 - For `-f text`, the output follows the template:
@@ -76,6 +83,21 @@ Notes:
   - `UI`: `P` pinned, `A` archived, `-` normal
   - `STATE`: `M` muted, `-` not muted
 - For `-f json`, each dialog includes keys like `name`, `entity` (with `id`), `unread_count`, and the latest `message`.
+
+## Delete Dialog
+
+Delete one or more dialogs by their peer IDs:
+
+- `tele dialog delete <dialog_id1> <dialog_id2> ...`
+
+Options:
+
+- `--revoke`: Withdraw for everyone (leave group, delete chat).
+
+Examples:
+
+- `tele dialog delete 1375282077`
+- `tele dialog delete -1001234567890 1375282077`
 
 ## Message List
 
@@ -98,6 +120,26 @@ Examples:
 - `tele -f json message list 1375282077 -n 10`
 - `tele -f json message list 1375282077 --range "last week"`
 - `tele -f json message list 1375282077 --from "2025-02-05" --to "yesterday"`
+- `tele -f json message list -1001234567890 -n 10`
+
+Notes:
+
+- Negative peer IDs (e.g., `-1001234567890`) can be passed directly as arguments.
+
+## Delete Messages
+
+Delete specific messages in a dialog:
+
+- `tele message delete <dialog_id> <message_id1> <message_id2> ...`
+
+Options:
+
+- `--revoke`: Delete for everyone (default is true).
+
+Examples:
+
+- `tele message delete 1375282077 123 124`
+- `tele message delete -1001234567890 456`
 
 ## Send Message
 
@@ -129,7 +171,7 @@ Examples:
 
 Notes:
 
-- Quote negative peer ids (or use `--`) so the shell/CLI does not treat them as options.
+- Negative peer IDs (e.g., `-1001234567890`) can be passed directly.
 - The command prints no output on success; verify by listing messages: `tele -f json message list <dialog_id> -n 5`.
 
 ## Additional Informations
