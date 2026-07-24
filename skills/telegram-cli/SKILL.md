@@ -194,6 +194,7 @@ Download attachments from a dialog (or across all dialogs if `<dialog_id>` is om
 Options (same filtering as `message list`):
 
 - Limit attachments: `--num <num>` or `-n <num>`
+- Filter type: `--type <type>` or `-t <type>` (photo, video, document, audio, voice, gif, sticker, image, pdf)
 - Filter read status: `--unread-only` (include only unread messages carrying attachments)
 - Pagination: `--offset_id <message_id>` (`offset_id` is excluded)
 - Output directory (download only): `--out-dir <target dir>` or `-o <target_dir>`
@@ -205,9 +206,9 @@ Options (same filtering as `message list`):
 Examples:
 
 - `tele -f json attachment list 1375282077 -n 100`
-- `tele -f json attachment list --range "last week"`
+- `tele -f json attachment list -t image -t pdf`
 - `tele attachment download 1375282077 -n 100 -o ~/.cache/tele-cli/1375282077`
-- `tele attachment download --range "last week" -o ./downloads`
+- `tele attachment download -t pdf -o ./downloads`
 
 Notes:
 

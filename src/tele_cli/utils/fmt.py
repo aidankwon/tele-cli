@@ -142,6 +142,47 @@ def attachment_type(msg: Message) -> str:
     return "file"
 
 
+def match_attachment_type(msg: Message, type_filters: list[str]) -> bool:
+    """Check if message attachment matches any specified type filter or alias."""
+    if not type_filters:
+        return True
+
+    kind = attachment_type(msg)
+    info = _get_attachment_info(msg)
+    ext = (info["ext"] or "").lower()
+    mime = (info["mime_type"] or "").lower()
+
+    for raw_filter in type_filters:
+        t = raw_filter.strip().lower()
+        if t in ("photo", "image", "images"):
+            if kind in ("photo", "gif", "sticker") or mime.startswith("image/"):
+                return True
+        elif t in ("video", "video_note", "videos"):
+            if kind in ("video", "video_note") or mime.startswith("video/"):
+                return True
+        elif t in ("audio", "voice", "music"):
+            if kind in ("audio", "voice") or mime.startswith("audio/"):
+                return True
+        elif t == "pdf":
+            if ext == ".pdf" or mime == "application/pdf":
+                return True
+        elif t in ("document", "doc", "documents"):
+            if kind == "document" or mime.startswith("application/") or mime.startswith("text/"):
+                return True
+        elif t in ("sticker", "stickers"):
+            if kind == "sticker":
+                return True
+        elif t in ("gif", "gifs"):
+            if kind == "gif":
+                return True
+        else:
+            # Fallback to direct kind or ext or mime check
+            if t == kind or t == ext.lstrip(".") or t in mime:
+                return True
+
+    return False
+
+
 def _get_attachment_info(msg: Message) -> dict:
     file = getattr(msg, "file", None)
     doc = getattr(msg, "document", None)

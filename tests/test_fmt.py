@@ -148,3 +148,27 @@ def test_format_attachment_list_synthetic_filename_fallback():
     assert data_no_ext[0]["name"] == "document_47117"
 
 
+def test_match_attachment_type():
+    from tele_cli.utils.fmt import match_attachment_type
+
+    photo_msg = _make_attachment_msg(1, "pic.jpg", ".jpg", "image/jpeg", 100, kind="photo")
+    pdf_msg = _make_attachment_msg(2, "file.pdf", ".pdf", "application/pdf", 200, kind="document")
+    audio_msg = _make_attachment_msg(3, "song.mp3", ".mp3", "audio/mpeg", 300, kind="audio")
+
+    # Match empty filter
+    assert match_attachment_type(photo_msg, []) is True
+
+    # Match aliases
+    assert match_attachment_type(photo_msg, ["image"]) is True
+    assert match_attachment_type(photo_msg, ["photo"]) is True
+    assert match_attachment_type(photo_msg, ["pdf"]) is False
+
+    assert match_attachment_type(pdf_msg, ["pdf"]) is True
+    assert match_attachment_type(pdf_msg, ["doc"]) is True
+    assert match_attachment_type(pdf_msg, ["image"]) is False
+
+    assert match_attachment_type(audio_msg, ["audio"]) is True
+    assert match_attachment_type(audio_msg, ["music"]) is True
+
+
+
