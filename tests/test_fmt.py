@@ -133,3 +133,18 @@ def test_format_attachment_list_document_attribute_fallback():
     assert data[0]["mime_type"] == "application/pdf"
     assert data[0]["size"] == 5000
 
+
+def test_format_attachment_list_synthetic_filename_fallback():
+    photo_msg = _make_attachment_msg(9184, None, ".jpg", "image/jpeg", 1024, kind="photo")
+    result = format_attachment_list([photo_msg], OutputFormat.json)
+    data = json.loads(result)
+    assert data[0]["name"] == "photo_9184.jpg"
+
+    no_ext_msg = _make_attachment_msg(47117, None, None, "application/octet-stream", 2048, kind="document")
+    no_ext_msg.document.file_name = None
+    no_ext_msg.document.attributes = []
+    result_no_ext = format_attachment_list([no_ext_msg], OutputFormat.json)
+    data_no_ext = json.loads(result_no_ext)
+    assert data_no_ext[0]["name"] == "document_47117"
+
+

@@ -169,6 +169,12 @@ def _get_attachment_info(msg: Message) -> dict:
     if size is None and doc and getattr(doc, "size", None):
         size = doc.size
 
+    kind = attachment_type(msg)
+
+    if not name:
+        suffix = ext if ext else ""
+        name = f"{kind}_{msg.id}{suffix}"
+
     return {
         "name": name,
         "ext": ext,
