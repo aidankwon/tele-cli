@@ -175,7 +175,7 @@ Options:
 - Time filters:
   - `--from`: Start boundary
   - `--to`: End boundary
-  - `--range`: Natural language date range (overrides --from/--to)
+  - `--range`: Natural language date range (overrides `--from`/`--to`)
 
 Examples:
 
@@ -263,6 +263,6 @@ Options:
 
 - `--rpc-stdio`: Enable newline-delimited JSON RPC over stdio (useful for programmatic/scripted consumption).
 
-## Additional Informations
+## Additional Information
 
 - Config file: `tele` reads `~/.config/tele/config.toml` by default and will create it on first run;
