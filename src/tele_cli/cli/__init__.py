@@ -541,17 +541,18 @@ def attachment_list(
     ] = None,
     num: Annotated[int | None, typer.Option("--num", "-n", help="Maximum number of attachments to return.")] = None,
     offset_id: Annotated[int, typer.Option("--offset_id", help="Pagination offset message ID (excluded).")] = 0,
+    unread_only: Annotated[bool, typer.Option("--unread-only", help="Include only unread messages with attachments.")] = False,
 ):
     """
     List attachments from messages in a dialog (or across all dialogs).
 
     Only messages that carry a downloadable file (photo, video, document, etc.)
-    are shown. Filtering arguments work like `tele message list`; `--num`
-    limits the number of attachments returned.
+    are shown. Telethon includes all messages by default regardless of read status;
+    use `--unread-only` to filter for unread messages.
 
     Examples:
     1. `tele attachment list 1375282077 -n 100`
-    2. `tele attachment list --range "last week"`
+    2. `tele attachment list --unread-only`
     """
     cli_args: SharedArgs = ctx.obj
 
@@ -585,6 +586,8 @@ def attachment_list(
                 offset_date=date_end,
             ):
                 if msg.file:
+                    if unread_only and not getattr(msg, "unread", False):
+                        continue
                     attachments.append(msg)
                     if limit is not None and len(attachments) >= limit:
                         break
@@ -612,17 +615,18 @@ def attachment_download(
     num: Annotated[int | None, typer.Option("--num", "-n", help="Maximum number of attachments to download.")] = None,
     offset_id: Annotated[int, typer.Option("--offset_id", help="Pagination offset message ID (excluded).")] = 0,
     out_dir: Annotated[Path, typer.Option("--out-dir", "-o", help="Output directory for downloads.")] = Path("."),
+    unread_only: Annotated[bool, typer.Option("--unread-only", help="Include only unread messages with attachments.")] = False,
 ):
     """
     Download attachments from messages in a dialog (or across all dialogs).
 
-    Only messages that carry a downloadable file are considered. Filtering
-    arguments work like `tele message list`; `--num` limits the number of
-    attachments downloaded.
+    Only messages that carry a downloadable file are considered. Telethon includes
+    all messages by default regardless of read status; use `--unread-only` to filter
+    for unread messages.
 
     Examples:
     1. `tele attachment download 1375282077 -n 100 -o ./downloads`
-    2. `tele attachment download --range "last week"`
+    2. `tele attachment download --unread-only`
     """
     cli_args: SharedArgs = ctx.obj
 
@@ -658,6 +662,8 @@ def attachment_download(
                 offset_date=date_end,
             ):
                 if msg.file:
+                    if unread_only and not getattr(msg, "unread", False):
+                        continue
                     print(f"Downloading attachment from message {msg.id}...", fmt=cli_args.fmt)
                     path = await client.download_media(msg, file=str(out_dir))
                     if path:

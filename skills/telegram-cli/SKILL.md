@@ -194,6 +194,7 @@ Download attachments from a dialog (or across all dialogs if `<dialog_id>` is om
 Options (same filtering as `message list`):
 
 - Limit attachments: `--num <num>` or `-n <num>`
+- Filter read status: `--unread-only` (include only unread messages carrying attachments)
 - Pagination: `--offset_id <message_id>` (`offset_id` is excluded)
 - Output directory (download only): `--out-dir <target dir>` or `-o <target_dir>`
 - Time filters:
