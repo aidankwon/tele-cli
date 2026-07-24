@@ -132,6 +132,96 @@ def format_message_list(messages: list[Message], fmt: None | OutputFormat = None
             raise NotImplementedError("Not Supported Format For Message List")
 
 
+def attachment_type(msg: Message) -> str:
+    """Best-effort attachment kind for a message with a downloadable file."""
+    for attr in ("photo", "video_note", "video", "voice", "audio", "gif", "sticker", "contact", "geo"):
+        if getattr(msg, attr, None):
+            return attr
+    if getattr(msg, "document", None):
+        return "document"
+    return "file"
+
+
+def _get_attachment_info(msg: Message) -> dict:
+    file = getattr(msg, "file", None)
+    doc = getattr(msg, "document", None)
+
+    name = getattr(file, "name", None)
+    ext = getattr(file, "ext", None)
+    mime_type = getattr(file, "mime_type", None)
+    size = getattr(file, "size", None)
+
+    if not name and doc and getattr(doc, "attributes", None):
+        for attr in doc.attributes:
+            if isinstance(attr, telethon.types.DocumentAttributeFilename):
+                name = attr.file_name
+                break
+
+    if not name and doc and getattr(doc, "file_name", None):
+        name = doc.file_name
+
+    if not ext and name and "." in name:
+        ext = f".{name.rsplit('.', 1)[-1]}"
+
+    if not mime_type and doc and getattr(doc, "mime_type", None):
+        mime_type = doc.mime_type
+
+    if size is None and doc and getattr(doc, "size", None):
+        size = doc.size
+
+    return {
+        "name": name,
+        "ext": ext,
+        "mime_type": mime_type,
+        "size": size,
+    }
+
+
+def _format_attachment_to_str(msg: Message, relative_time: bool = True) -> str:
+    if relative_time:
+        date_str = arrow.get(msg.date).humanize() if msg.date else "?"
+    else:
+        date_str = msg.date.strftime("%Y-%m-%d %H:%M") if msg.date else "?"
+
+    info_dict = _get_attachment_info(msg)
+    parts = []
+    if info_dict["name"]:
+        parts.append(f"name='{info_dict['name']}'")
+    if info_dict["ext"]:
+        parts.append(f"ext='{info_dict['ext']}'")
+    if info_dict["mime_type"]:
+        parts.append(f"mime='{info_dict['mime_type']}'")
+    if info_dict["size"] is not None:
+        parts.append(f"size={info_dict['size']}")
+
+    info = " ".join(parts)
+    return f"* {msg.id} ({date_str}) [{attachment_type(msg)}] {info}".rstrip()
+
+
+def format_attachment_list(messages: list[Message], fmt: None | OutputFormat = None) -> str:
+    output_fmt = fmt or OutputFormat.text
+    match output_fmt:
+        case OutputFormat.text:
+            return "\n".join([_format_attachment_to_str(msg) for msg in messages])
+        case OutputFormat.json:
+
+            def f(msg: Message) -> dict:
+                info_dict = _get_attachment_info(msg)
+                return {
+                    "message_id": msg.id,
+                    "date": msg.date,
+                    "type": attachment_type(msg),
+                    "name": info_dict["name"],
+                    "ext": info_dict["ext"],
+                    "mime_type": info_dict["mime_type"],
+                    "size": info_dict["size"],
+                }
+
+            return json.dumps([f(msg) for msg in messages], default=json_default_callback, ensure_ascii=False)
+        case OutputFormat.toon:
+            raise NotImplementedError("Not Supported Format For Attachment List")
+
+
 def _format_session_info_to_str(x: SessionInfo) -> str:
     username = f"@{x.user_name}" if x.user_name else "unknown"
     return f"{x.user_id: <12} {x.user_display_name or 'unknown'} ({username}) {x.session_name}"

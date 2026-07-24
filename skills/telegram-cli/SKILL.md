@@ -10,7 +10,7 @@ metadata:
 
 ## Overview
 
-Use `tele` to authenticate, list dialogs, fetch messages, download files from messages, and delete messages from Telegram directly from the terminal.
+Use `tele` to authenticate, list dialogs, fetch messages, list and download attachments, download files from messages, and delete messages from Telegram directly from the terminal.
 
 
 ## Setup
@@ -180,6 +180,39 @@ Options:
 Examples:
 
 - `tele message download 1375282077 -n 10 -o ~/.cache/tele-cli/1375282077`
+
+## Attachments
+
+List attachments (photos, videos, documents, etc.) carried by messages in a dialog (or across all dialogs if `<dialog_id>` is omitted):
+
+- `tele -f json attachment list [<dialog_id>]`
+
+Download attachments from a dialog (or across all dialogs if `<dialog_id>` is omitted):
+
+- `tele attachment download [<dialog_id>] -o ~/.cache/tele-cli/<dialog_id>`
+
+Options (same filtering as `message list`):
+
+- Limit attachments: `--num <num>` or `-n <num>`
+- Pagination: `--offset_id <message_id>` (`offset_id` is excluded)
+- Output directory (download only): `--out-dir <target dir>` or `-o <target_dir>`
+- Time filters:
+  - `--from`: Start boundary
+  - `--to`: End boundary
+  - `--range`: Natural language date range (overrides `--from`/`--to`)
+
+Examples:
+
+- `tele -f json attachment list 1375282077 -n 100`
+- `tele -f json attachment list --range "last week"`
+- `tele attachment download 1375282077 -n 100 -o ~/.cache/tele-cli/1375282077`
+- `tele attachment download --range "last week" -o ./downloads`
+
+Notes:
+
+- Only messages with a downloadable file are included; text-only messages are skipped.
+- For `-f json`, each entry includes `message_id`, `date`, `type`, `name`, `ext`, `mime_type`, and `size`.
+- `attachment download` is equivalent to `message download` but scoped explicitly to messages that carry a file, and pairs with `attachment list` for inspecting before downloading.
 
 ## Send Message
 

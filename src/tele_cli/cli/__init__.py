@@ -56,6 +56,12 @@ message_cli = typer.Typer(
     Inspect dialog messages.
     """,
 )
+attachment_cli = typer.Typer(
+    no_args_is_help=True,
+    help="""
+    List and download message attachments in a dialog.
+    """,
+)
 daemon_cli = typer.Typer(
     no_args_is_help=True,
     help="""
@@ -65,6 +71,7 @@ daemon_cli = typer.Typer(
 cli.add_typer(auth_cli, name="auth")
 cli.add_typer(dialog_cli, name="dialog")
 cli.add_typer(message_cli, name="message")
+cli.add_typer(attachment_cli, name="attachment")
 cli.add_typer(daemon_cli, name="daemon")
 
 
@@ -515,6 +522,151 @@ def message_send(
             file=file_args or None,
         )
 
+        return True
+
+    ok = asyncio.run(_run())
+    if not ok:
+        raise typer.Exit(code=1)
+
+
+@attachment_cli.command(name="list", context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
+def attachment_list(
+    ctx: typer.Context,
+    dialog_id: Annotated[int | None, typer.Argument(help="Dialog peer ID (see `tele dialog list`). If omitted, searches across all dialogs.")] = None,
+    from_str: Annotated[str | None, typer.Option("--from", help="Start boundary")] = None,
+    to_str: Annotated[str | None, typer.Option("--to", help="End boundary")] = None,
+    range_str: Annotated[
+        str | None,
+        typer.Option("--range", help="Natural-language date range (overrides --from/--to)."),
+    ] = None,
+    num: Annotated[int | None, typer.Option("--num", "-n", help="Maximum number of attachments to return.")] = None,
+    offset_id: Annotated[int, typer.Option("--offset_id", help="Pagination offset message ID (excluded).")] = 0,
+):
+    """
+    List attachments from messages in a dialog (or across all dialogs).
+
+    Only messages that carry a downloadable file (photo, video, document, etc.)
+    are shown. Filtering arguments work like `tele message list`; `--num`
+    limits the number of attachments returned.
+
+    Examples:
+    1. `tele attachment list 1375282077 -n 100`
+    2. `tele attachment list --range "last week"`
+    """
+    cli_args: SharedArgs = ctx.obj
+
+    date_range: Tuple[datetime | None, datetime | None] = utils.date.parse_date_range(from_str, to_str, range_str)
+
+    limit: int | None = None
+    if num:
+        limit = num
+    if limit == 0 and date_range == (None, None):
+        limit = 1
+
+    async def _run() -> bool:
+        app = await TeleCLI.create(session_name=cli_args.session, config=load_config(config_file=cli_args.config_file))
+
+        (date_start, date_end) = date_range
+        earliest_message: Message | None = None
+        if date_start:
+            async with app.client() as client:
+                ret: list[Message] = [msg async for msg in client.iter_messages(dialog_id, offset_date=date_start, limit=1, offset_id=-1)]
+                earliest_message = ret[0] if len(ret) >= 1 else None
+
+        min_id: int = earliest_message.id if earliest_message else 0
+
+        async with app.client() as client:
+            attachments: list[Message] = []
+            async for msg in client.iter_messages(
+                dialog_id,
+                min_id=min_id,
+                add_offset=(-1 if min_id else 0),
+                offset_id=offset_id,
+                offset_date=date_end,
+            ):
+                if msg.file:
+                    attachments.append(msg)
+                    if limit is not None and len(attachments) >= limit:
+                        break
+            attachments.reverse()
+
+            print(utils.fmt.format_attachment_list(attachments, cli_args.fmt), fmt=cli_args.fmt)
+
+        return True
+
+    ok = asyncio.run(_run())
+    if not ok:
+        raise typer.Exit(code=1)
+
+
+@attachment_cli.command(name="download", context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
+def attachment_download(
+    ctx: typer.Context,
+    dialog_id: Annotated[int | None, typer.Argument(help="Dialog peer ID (see `tele dialog list`). If omitted, searches across all dialogs.")] = None,
+    from_str: Annotated[str | None, typer.Option("--from", help="Start boundary")] = None,
+    to_str: Annotated[str | None, typer.Option("--to", help="End boundary")] = None,
+    range_str: Annotated[
+        str | None,
+        typer.Option("--range", help="Natural-language date range (overrides --from/--to)."),
+    ] = None,
+    num: Annotated[int | None, typer.Option("--num", "-n", help="Maximum number of attachments to download.")] = None,
+    offset_id: Annotated[int, typer.Option("--offset_id", help="Pagination offset message ID (excluded).")] = 0,
+    out_dir: Annotated[Path, typer.Option("--out-dir", "-o", help="Output directory for downloads.")] = Path("."),
+):
+    """
+    Download attachments from messages in a dialog (or across all dialogs).
+
+    Only messages that carry a downloadable file are considered. Filtering
+    arguments work like `tele message list`; `--num` limits the number of
+    attachments downloaded.
+
+    Examples:
+    1. `tele attachment download 1375282077 -n 100 -o ./downloads`
+    2. `tele attachment download --range "last week"`
+    """
+    cli_args: SharedArgs = ctx.obj
+
+    date_range: Tuple[datetime | None, datetime | None] = utils.date.parse_date_range(from_str, to_str, range_str)
+
+    limit: int | None = None
+    if num:
+        limit = num
+    if limit == 0 and date_range == (None, None):
+        limit = 1
+
+    async def _run() -> bool:
+        app = await TeleCLI.create(session_name=cli_args.session, config=load_config(config_file=cli_args.config_file))
+
+        (date_start, date_end) = date_range
+        earliest_message: Message | None = None
+        if date_start:
+            async with app.client() as client:
+                ret: list[Message] = [msg async for msg in client.iter_messages(dialog_id, offset_date=date_start, limit=1, offset_id=-1)]
+                earliest_message = ret[0] if len(ret) >= 1 else None
+
+        min_id: int = earliest_message.id if earliest_message else 0
+
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+        downloaded_count = 0
+        async with app.client() as client:
+            async for msg in client.iter_messages(
+                dialog_id,
+                min_id=min_id,
+                add_offset=(-1 if min_id else 0),
+                offset_id=offset_id,
+                offset_date=date_end,
+            ):
+                if msg.file:
+                    print(f"Downloading attachment from message {msg.id}...", fmt=cli_args.fmt)
+                    path = await client.download_media(msg, file=str(out_dir))
+                    if path:
+                        print(f"Saved to {path}", fmt=cli_args.fmt)
+                        downloaded_count += 1
+                        if limit is not None and downloaded_count >= limit:
+                            break
+
+        print(f"Downloaded {downloaded_count} attachments.", fmt=cli_args.fmt)
         return True
 
     ok = asyncio.run(_run())
